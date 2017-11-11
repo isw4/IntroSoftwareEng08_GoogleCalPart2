@@ -43,7 +43,8 @@ def list_calendars(service):
 			"id": cal["id"],
 			"summary": cal["summary"],
 			"selected": selected,
-			"primary": primary
+			"primary": primary,
+			"checked": ""
 			})
 	
 	return sorted(result, key=cal_sort_key)

@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
 <html lang="en"> 
 <head>
-  <title>Meeting Busy and Free Times</title>
+  <title>Meeting Busy Times</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <link rel="stylesheet" type="text/css"
@@ -34,7 +34,7 @@
 
   <h1>Busy times</h1>
   
-    <form action="{{ url_for('set_date_range') }}" method="post" id="daterangeform">
+    <form action="{{ url_for('set_data') }}" method="post" id="daterangeform">
       <div class="row">
         <div class="col-md-4">
         <label for="daterange">Date Range</label>
@@ -65,67 +65,65 @@
       
       <div class="col-md-3">
         <label for="begin_time">Time Start</label>
-        <input name="begin_time" type="time" value="{{ session.begin_time | fmttime }}">
+        <input name="begin_time" id="begin" type="time" value="{{ session.begin_time | fmttime }}">
       </div>
 
       <div class="col-md-3">
         <label for="end_time">Time End</label>
-        <input name="end_time" type="time" value="{{ session.end_time | fmttime }}">
+        <input name="end_time" id="end" type="time" value="{{ session.end_time | fmttime }}">
       </div>
 
       <div class="col-md-2">
-        <button type="submit">Submit Range</button>
+        <button type="submit" id="submit">Submit</button>
       </div>
       </div>
+
+      {% if session.calendars is not defined %}
+
+        <hr>
+        <p id="description">Some description about the app and data range picker</p>
+
+      {% else %}
+
+        <hr>
+        <h3>Select your Calendars</h3>
+        <div class="row">
+          {% for cal in session.calendars if cal.selected %}
+            <div class="col-md-4">
+              <input name="checkbox" type="checkbox" value="{{ cal.id }}">
+              <label for="{{ cal.id }}">{{ cal.summary }}</label>
+            </div>
+            {% if loop.index is divisibleby 3 %}
+              </div> <div class="row">
+            {% endif %}
+          {% endfor %}
+        </div>
+
+      {% endif %}
 
     </form>
   
   <div id="content">
 
-  {% if session.calendars is not defined %}
-
-    <p id="description">Some description about the app and data range picker</p>
-
-  {% else %}
-    <hr>
-    <form action="{{ url_for('set_calendar') }}" method="post" id="calendarselect">
-      <h2>Calendars</h2>
-      <div class="row">
-        {% for cal in session.calendars if cal.selected %}
-          <div class="col-md-4">
-            <input name="checkbox" type="checkbox" value="{{ cal.id }}">
-            <label for="{{ cal.id }}">{{ cal.summary }}</label>
-          </div>
-          {% if loop.index is divisibleby 3 %}
-            </div> <div class="row">
-          {% endif %}
-        {% endfor %}
-      </div>
-
-      <button type="submit">Submit Calendars</button>
-    </form>
-
-  {% endif %}
-
   {% if session.busytimes is defined %}
 
     <hr>
-    <h2>Busy Times</h2>
+    <h3>These are your busy times</h3>
     <div class="row">
-      <table>
+      <table class='table table-striped table-bordered'>
         <thead>
           <tr>
-            <td>Title</td>
-            <td>Start Date Time</td>
-            <td>End Date Time</td>
+            <td>Event Title</td>
+            <td>Start Date-time</td>
+            <td>End Date-time</td>
           </tr>
         </thead>
         <tbody>
           {% for e in session.busytimes %}
             <tr>
               <td> {{ e.summary }} </td>
-              <td> {{ e.begin_datetime }} </td>
-              <td> {{ e.end_datetime }} </td>
+              <td> {{ e.begin_datetime | fmtdate }} {{ e.begin_datetime | fmttime }} </td>
+              <td> {{ e.end_datetime | fmtdate }} {{ e.end_datetime | fmttime }} </td>
             </tr>
           {% endfor %}
         </tbody>
@@ -141,26 +139,29 @@
 
 <script type="text/javascript">
   // Sets up the event listeners when the page is first loaded(not logged in)
+  // Disables the submit button whenever the time inputs are invalid
   $(document).ready(function(){
+    $('#begin').change(function(){
+      var beginTime = $(this).val().replace(':','');
+      var endTime = $("#end").val().replace(':','');
+      if (beginTime > endTime){
+        $('#submit').attr("disabled", "disabled");
+      }
+      else {
+        $('#submit').removeAttr("disabled");
+      }
+    })
 
-    // // Sets up event listener for the date range picker
-    // // $("#calendarselect").submit(function(event){
-    // //   event.preventDefault();
-
-    // //   $.post("/submitdaterange", $(this).serialize(),
-    // //     function(data){
-    // //       console.log(data.result.success);
-
-    // //       if (!$("#calendardisplay").length) {
-    // //         //if calendar display does not exist
-    // //         console.log("display does not exist. clearing description.");
-    // //         $("#description").fadeOut();
-    // //         console.log("Showing calendars");
-    // //         $("#content").appendChild("<p>Calendar</p>");
-    // //       }
-    //     } //end response to ajax return
-    //   ) //end ajax post
-    // }) //end event listener for date range picker
+    $('#end').change(function(){
+      var beginTime = $("#begin").val().replace(':','');
+      var endTime = $(this).val().replace(':','');
+      if (beginTime > endTime){
+        $('#submit').attr("disabled", "disabled");
+      }
+      else {
+        $('#submit').removeAttr("disabled");
+      }
+    })
   }) //end on document ready
 </script>
 

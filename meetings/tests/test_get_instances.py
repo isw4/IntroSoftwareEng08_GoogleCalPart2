@@ -65,7 +65,7 @@ def test_samed_after():
 		"start" : { "dateTime" : '2013-05-12T22:30:00+00:00' },
 		"end"   : { "dateTime" : '2013-05-12T23:30:00+00:00' }
 	}
-	assert really_between_times(instance, BEGIN_TIME, END_TIME) == True
+	assert really_between_times(instance, BEGIN_TIME, END_TIME) == False
 
 
 def test_diffd_no_overlap():

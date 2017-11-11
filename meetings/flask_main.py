@@ -55,37 +55,29 @@ def index():
 	return render_template('index.html')
 
 
-@app.route("/showcalendars")
-def render_calendars():
+@app.route("/display")
+def render_display():
 	app.logger.debug("Rendering Calendars. Checking Google Calendar credentials")
 	credentials = valid_credentials()
 	if not credentials:
-		flask.session['next'] = flask.url_for("render_calendars")
 		return flask.redirect(flask.url_for("authorize"))
 	else:
 		app.logger.debug("Have Google Calendar credentials")
 		gcal_service = get_gcal_service(credentials)
-		app.logger.debug("Returned from get_gcal_service")
+		app.logger.debug("Returned from get_gcal_service. Getting Calendars")
 		flask.session['calendars'] = list_calendars(gcal_service)
-		return render_template('index.html')
-
-
-@app.route("/showbusytimes")
-def render_busy_times():
-	app.logger.debug("Rendering busy times. Checking Google Calendar credentials")
-	credentials = valid_credentials()
-	if not credentials:
-		flask.session['next'] = flask.url_for("render_calendars")
-		return flask.redirect(flask.url_for("authorize"))
+		
+	if not flask.session['selected_cal']:
+		app.logger.debug("No calendars already selected")
+		flask.session['busytimes'] = []
+		pass
 	else:
-		app.logger.debug("Have Google Calendar credentials")
-		gcal_service = get_gcal_service(credentials)
-		app.logger.debug("Returned from get_gcal_service")
-		instances = list_instances_btwn_times_in_dates(gcal_service, flask.session['selected_cal'], 
-													   flask.session['begin_date'], flask.session['end_date'],
-													   flask.session['begin_time'], flask.session['end_time'])
-		flask.session['busytimes'] = instances
-		return render_template('index.html')
+		app.logger.debug("Getting busy event instances from these selected calendars: {}".format(flask.session['selected_cal']))
+		flask.session['busytimes'] = list_instances_btwn_times_in_dates(gcal_service, flask.session['selected_cal'], 
+																		flask.session['begin_date'], flask.session['end_date'],
+																		flask.session['begin_time'], flask.session['end_time'])
+
+	return render_template('index.html')
 
 
 #####
@@ -99,38 +91,31 @@ def render_busy_times():
 #
 #####
 
-@app.route("/submitdaterange", methods=["POST"])
-def set_date_range():
-	daterange = request.form.get('daterange')
+@app.route("/setdata", methods=['POST'])
+def set_data():
+	app.logger.debug("In set_data with request: {}".format(request.form))
 	
-	app.logger.debug("Date-time range received: {}".format(request.form))
+	flask.session['begin_time'] = interpret_time(request.form.get('begin_time'))
+	flask.session['end_time'] = interpret_time(request.form.get('end_time'))
+	
+	assert arrow.get(flask.session['begin_time']) <= arrow.get(flask.session['end_time'])
+	app.logger.debug("Begin and end times make sense")
+
+	daterange = request.form.get('daterange')
 	flask.session['daterange'] = daterange
 	daterange_parts = daterange.split()
 	flask.session['begin_date'] = interpret_date(daterange_parts[0])
 	flask.session['end_date'] = interpret_date(daterange_parts[2])
-	flask.session['begin_time'] = interpret_time(request.form.get('begin_time'))
-	flask.session['end_time'] = interpret_time(request.form.get('end_time'))
-	
-	app.logger.debug("Parsed {} - {}  dates as {} - {}. Begin and end times updated to: {} - {}".format(
-		daterange_parts[0], daterange_parts[2], 
-		flask.session['begin_date'], flask.session['end_date'],
-		flask.session['begin_time'], flask.session['end_time']))
-	
-	return flask.redirect(url_for('render_calendars'))
 
-
-@app.route("/submitcalendars", methods=["POST"])
-def set_calendar():
-	app.logger.debug("Calendar selection submitted")
 	selections = request.form.getlist("checkbox")
-
 	if not selections:
-		app.logger.debug("Nothing selected")
-		return render_template('index.html')
+		app.logger.debug("No calendars selected")
+		flask.session['selected_cal'] = []
 	else:
 		app.logger.debug("Selected calendars are: {}".format(selections))
 		flask.session['selected_cal'] = selections
-		return flask.redirect(url_for("render_busy_times"))
+
+	return flask.redirect(url_for('render_display'))
 
 
 ####
@@ -201,12 +186,7 @@ def get_gcal_service(credentials):
 def authorize():
 	"""
 	Checking one last time for valid credentials, even though a check may
-	have been done in order to branch into this redirect. If a 'next' URL
-	has been defined in the session prior to calling this function, it will
-	redirect to that URL. Otherwise, it will  render the index page.
-
-	The 'next' URL is defined in the session and as a request arg, as the
-	request arg is lost in the redirect to oauth2callback
+	have been done in order to branch into this redirect.
 	"""
 	app.logger.debug("Authorizing")
 	credentials = valid_credentials()
@@ -214,12 +194,7 @@ def authorize():
 		app.logger.debug("Redirecting to authorization")
 		return flask.redirect(flask.url_for('oauth2callback'))
 
-	if flask.session['next'] == "":
-		return flask.render_template("index.html")
-	else:
-		_next = flask.session['next']
-		flask.session['next'] = ""
-		return flask.redirect(_next)
+	return flask.redirect(url_for("render_display"))
 
 
 @app.route('/oauth2callback')
@@ -288,6 +263,7 @@ def init_session_values():
 	# Default time span each day, 8 to 5
 	flask.session["begin_time"] = interpret_time("9am")
 	flask.session["end_time"] = interpret_time("5pm")
+	flask.session['selected_cal'] = []
 
 
 def interpret_time( text ):
