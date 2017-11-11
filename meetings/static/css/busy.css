@@ -12,3 +12,6 @@ body {
     background-color: "#ccffcc";
 }
 
+form {
+	width: 100%;
+}

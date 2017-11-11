@@ -32,91 +32,135 @@
 <body>
 <div class="container">
 
-<h1>Busy times</h1>
-
-{% if g.calendars is defined %}
-  <p>Logged in as:</p>
-{% else %}
-  <p>Not logged in</p>
-{% endif %}
-
-<form action="/setrange" method="post" id="daterangeform">
-  <label for="daterange">Date Range</label>
-  <input type="text" name="daterange" size="13"
-    {% if session.daterange is defined %}
-      value="{{session.daterange}}"
-    {% endif %}
-    class="pull-down"
-    style="background: #fff; cursor: pointer; padding: 5px 10px;
-    border: 1px solid #ccc; width: 12em" >
-  <script type="text/javascript">
-  $(function() {
-  $('input[name="daterange"]').daterangepicker(
-    {    ranges: {
-           'Today': [moment(), moment()],
-           'Tomorrow':[moment().add(1, 'days'),
-                       moment().add(1, 'days')], 
-           'This week':[moment(), moment().endOf('week')],
-           'Next week':[moment().add(7, 'days').startOf('week'),
-                        moment().add(7, 'days').endOf('week')],
-           'This month':[moment(), moment().endOf('month')],
-           'Within two weeks':[moment(),moment().add(15, 'days')]
-        }}
-       );
-    });
-  </script>
-  <input type="submit" value="Submit Range" />
-</form>
-
-{% if g.calendars is not defined %}
-
-<div id="content">
-  <p id="description">Some description about the app and data range picker</p>
-
-</div>
-
-
-{% else %}
+  <h1>Busy times</h1>
   
-  <div class="row">
-  {% for cal in g.calendars if cal.selected %}
+    <form action="{{ url_for('set_date_range') }}" method="post" id="daterangeform">
+      <div class="row">
+        <div class="col-md-4">
+        <label for="daterange">Date Range</label>
+        <input type="text" name="daterange" size="13"
+          {% if session.daterange is defined %}
+            value="{{session.daterange}}"
+          {% endif %}
+          class="pull-down"
+          style="background: #fff; cursor: pointer; padding: 5px 10px;
+          border: 1px solid #ccc; width: 12em" >
+        <script type="text/javascript">
+        $(function() {
+        $('input[name="daterange"]').daterangepicker(
+          {    ranges: {
+                 'Today': [moment(), moment()],
+                 'Tomorrow':[moment().add(1, 'days'),
+                             moment().add(1, 'days')], 
+                 'This week':[moment(), moment().endOf('week')],
+                 'Next week':[moment().add(7, 'days').startOf('week'),
+                              moment().add(7, 'days').endOf('week')],
+                 'This month':[moment(), moment().endOf('month')],
+                 'Within two weeks':[moment(),moment().add(15, 'days')]
+              }}
+             );
+          });
+        </script>
+      </div>
+      
+      <div class="col-md-3">
+        <label for="begin_time">Time Start</label>
+        <input name="begin_time" type="time" value="{{ session.begin_time | fmttime }}">
+      </div>
+
+      <div class="col-md-3">
+        <label for="end_time">Time End</label>
+        <input name="end_time" type="time" value="{{ session.end_time | fmttime }}">
+      </div>
+
+      <div class="col-md-2">
+        <button type="submit">Submit Range</button>
+      </div>
+      </div>
+
+    </form>
+  
+  <div id="content">
+
+  {% if session.calendars is not defined %}
+
+    <p id="description">Some description about the app and data range picker</p>
+
+  {% else %}
+    <hr>
+    <form action="{{ url_for('set_calendar') }}" method="post" id="calendarselect">
+      <h2>Calendars</h2>
+      <div class="row">
+        {% for cal in session.calendars if cal.selected %}
           <div class="col-md-4">
-	   {{ cal.summary }}
+            <input name="checkbox" type="checkbox" value="{{ cal.id }}">
+            <label for="{{ cal.id }}">{{ cal.summary }}</label>
           </div>
-         {% if loop.index is divisibleby 3 %}
-          </div> <div class="row">
-         {% endif %}
-  {% endfor %}
+          {% if loop.index is divisibleby 3 %}
+            </div> <div class="row">
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <button type="submit">Submit Calendars</button>
+    </form>
+
+  {% endif %}
+
+  {% if session.busytimes is defined %}
+
+    <hr>
+    <h2>Busy Times</h2>
+    <div class="row">
+      <table>
+        <thead>
+          <tr>
+            <td>Title</td>
+            <td>Start Date Time</td>
+            <td>End Date Time</td>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in session.busytimes %}
+            <tr>
+              <td> {{ e.summary }} </td>
+              <td> {{ e.begin_datetime }} </td>
+              <td> {{ e.end_datetime }} </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  {% endif %}
+
   </div>
 
-{% endif %}
-    
-
-  </div>  <!-- container (for bootstrap) -->
+</div>  <!-- container (for bootstrap) -->
 
 
 <script type="text/javascript">
   // Sets up the event listeners when the page is first loaded(not logged in)
   $(document).ready(function(){
 
-    // Sets up event listener for the date range picker
-    $("#daterangeform").submit(function(event){
-      event.preventDefault();
+    // // Sets up event listener for the date range picker
+    // // $("#calendarselect").submit(function(event){
+    // //   event.preventDefault();
 
-      $.post("/submitdaterange", $(this).serialize(),
-        function(data){
-          console.log(data.result.success);
+    // //   $.post("/submitdaterange", $(this).serialize(),
+    // //     function(data){
+    // //       console.log(data.result.success);
 
-          if (!$("#calendardisplay").length) {
-            //if calendar display does not exist
-            console.log("display does not exist. clearing description.");
-            $("#description").fadeOut();
-            console.log("Showing calendars");
-            $("#content").appendChild("<p>Calendar</p>");
-          }
-        } //end response to ajax return
-      ) //end ajax post
-    }) //end event listener for date range picker
+    // //       if (!$("#calendardisplay").length) {
+    // //         //if calendar display does not exist
+    // //         console.log("display does not exist. clearing description.");
+    // //         $("#description").fadeOut();
+    // //         console.log("Showing calendars");
+    // //         $("#content").appendChild("<p>Calendar</p>");
+    // //       }
+    //     } //end response to ajax return
+    //   ) //end ajax post
+    // }) //end event listener for date range picker
   }) //end on document ready
 </script>
 
