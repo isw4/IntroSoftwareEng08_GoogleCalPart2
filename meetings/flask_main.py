@@ -7,13 +7,9 @@ import uuid
 import json
 import logging
 
-from from_gcal import list_calendars, list_instances_btwn_times_in_dates
-
-# Date handling 
+# Date/time and timezone handling 
 import arrow # Replacement for datetime, based on moment.js
-# import datetime # But we still need time
 from dateutil import tz  # For interpreting local times
-
 
 # OAuth2  - Google library implementation for convenience
 from oauth2client import client
@@ -21,6 +17,10 @@ import httplib2   # used in oauth2 flow
 
 # Google API for services 
 from apiclient import discovery
+
+# Functions to help get and process information from Google Calendars
+from from_gcal import list_calendars, list_instances_btwn_times_in_dates
+
 
 ###
 # Globals
@@ -57,7 +57,13 @@ def index():
 
 @app.route("/display")
 def render_display():
-	app.logger.debug("Rendering Calendars. Checking Google Calendar credentials")
+	"""
+	Gets all the information needed to display on the page. On the first submission,
+	it gets the calenders from Google, authorizing if needed. It then renders the page.
+	On second submission, when the user has checked the calendars to use, it gets the
+	correct event instances, then renders the page.
+	"""
+	app.logger.debug("Getting Calendars. Checking Google Calendar credentials")
 	credentials = valid_credentials()
 	if not credentials:
 		return flask.redirect(flask.url_for("authorize"))
@@ -66,16 +72,19 @@ def render_display():
 		gcal_service = get_gcal_service(credentials)
 		app.logger.debug("Returned from get_gcal_service. Getting Calendars")
 		flask.session['calendars'] = list_calendars(gcal_service)
-		
+	
 	if not flask.session['selected_cal']:
 		app.logger.debug("No calendars already selected")
 		flask.session['busytimes'] = []
 		pass
+		# End of first submit
 	else:
+		# In the second submit, if user has selected calendars
 		app.logger.debug("Getting busy event instances from these selected calendars: {}".format(flask.session['selected_cal']))
 		flask.session['busytimes'] = list_instances_btwn_times_in_dates(gcal_service, flask.session['selected_cal'], 
 																		flask.session['begin_date'], flask.session['end_date'],
 																		flask.session['begin_time'], flask.session['end_time'])
+		# End of second submit
 
 	return render_template('index.html')
 
@@ -93,20 +102,26 @@ def render_display():
 
 @app.route("/setdata", methods=['POST'])
 def set_data():
+	"""
+	Gets option information and sets cookies
+	"""
 	app.logger.debug("In set_data with request: {}".format(request.form))
 	
+	# Time
 	flask.session['begin_time'] = interpret_time(request.form.get('begin_time'))
 	flask.session['end_time'] = interpret_time(request.form.get('end_time'))
 	
 	assert arrow.get(flask.session['begin_time']) <= arrow.get(flask.session['end_time'])
 	app.logger.debug("Begin and end times make sense")
 
+	# Date
 	daterange = request.form.get('daterange')
 	flask.session['daterange'] = daterange
 	daterange_parts = daterange.split()
 	flask.session['begin_date'] = interpret_date(daterange_parts[0])
 	flask.session['end_date'] = interpret_date(daterange_parts[2])
 
+	# Calendar selections
 	selections = request.form.getlist("checkbox")
 	if not selections:
 		app.logger.debug("No calendars selected")
@@ -324,6 +339,7 @@ def next_day(isotext):
 #
 #################
 
+
 @app.template_filter( 'fmtdate' )
 def format_arrow_date( date ):
 	try: 
@@ -331,6 +347,7 @@ def format_arrow_date( date ):
 		return normal.format("ddd MM/DD/YYYY")
 	except:
 		return "(bad date)"
+
 
 @app.template_filter( 'fmttime' )
 def format_arrow_time( time ):

@@ -10,11 +10,15 @@ list_instances_between_datetimes	: lists all event instances from selected calen
 
 Helper Functions:
 cal_sort_key
-merge_date_time
+double_check_date_restriction
+reorg_instance
 really_between_times
+merge_date_time
+list_availabilities_btwn_dates
 """
 
 import arrow
+from dateutil import tz
 
 #############################
 #
@@ -44,7 +48,6 @@ def list_calendars(service):
 			"summary": cal["summary"],
 			"selected": selected,
 			"primary": primary,
-			"checked": ""
 			})
 	
 	return sorted(result, key=cal_sort_key)
@@ -71,13 +74,13 @@ def list_instances_btwn_times_in_dates(service, selected_cal, begin_date, end_da
 	
 	begin_datetime = merge_date_time(begin_date, begin_time)	# An isoformatted time string of the earliest date and the start time
 	end_datetime   = merge_date_time(end_date,   end_time)		# An isoformatted time string of the latest date and the end time
-	print("Getting Google Calendar event instances from {} to {}".format(begin_datetime, end_datetime))
+	print("Getting Google Calendar events from selected calendars")
 
 	# There may be events that recur. The first loop identifies all the unique "types" of events
 	# and then the second loop finds all instances of the event, nonrecurring and recurring
 	pre_events = []
 	for cal_id in selected_cal:
-		events = service.events().list(calendarId=cal_id).execute()
+		events = service.events().list(calendarId=cal_id, timeMin=begin_datetime, timeMax=end_datetime).execute()
 		print("Events found: {}".format(events))
 		for event in events['items']:
 			# Ignores transparent events
@@ -99,32 +102,28 @@ def list_instances_btwn_times_in_dates(service, selected_cal, begin_date, end_da
 
 	# This is the second loop, getting all instances that Google gives us, and then eliminating those
 	# that are not really within the time range on each day
+	print("Finding event instances")
 	result = []
 	for pre_e in pre_events:
 		if pre_e['recurs']:
 			# Need to get all event instances for a recurring event, within a certain date-time range
 			instances = service.events().instances(calendarId=pre_e['cal_id'], eventId=pre_e['event_id'],
 												   timeMin=begin_datetime, timeMax=end_datetime).execute()
+			print("Recurring instances found: {}".format(instances))
 			for instance in instances['items']:
+				instance = reorg_instance(instance)
 				if really_between_times(instance, begin_time, end_time):
-					result.append({
-						"event_id": instance['id'],
-						"summary": instance['summary'],
-						"begin_datetime": instance['start']['dateTime'],
-						"end_datetime": instance['end']['dateTime']
-						})
+					result.append(instance)
 		else:
 			# For non-recurring events, there is only one instance
 			instance = service.events().get(calendarId=pre_e['cal_id'], eventId=pre_e['event_id']).execute()
-			if really_between_times(instance, begin_time, end_time):
-				result.append({
-					"event_id": instance['id'],
-					"summary": instance['summary'],
-					"begin_datetime": instance['start']['dateTime'],
-					"end_datetime": instance['end']['dateTime']
-					})
-		
-	print("All instances found: {}".format(result))
+			print("Nonrecurring instances found: {}".format(instance))
+			if instance:
+				instance = reorg_instance(instance)
+				if really_between_times(instance, begin_time, end_time):
+					result.append(instance)
+	
+	print("All busy instances found: {}".format(result))
 	return result
 
 
@@ -150,6 +149,40 @@ def cal_sort_key( cal ):
 	else:
 	   primary_key = "X"
 	return (primary_key, selected_key, cal["summary"])
+			
+
+def reorg_instance(instance):
+	"""
+	Reorganizes the instance object returned from Google, for more consistency
+	and removing unnecesary information
+
+	Args:
+		instance:	a google calendar dict
+
+	Returns:
+		a dict with only relevant key value pairs
+	"""
+	if 'dateTime' in instance['start']:
+		# Instance has a start and end TIME
+		begin_datetime = instance['start']['dateTime']
+		end_datetime   = instance['end']['dateTime']
+	elif 'date' in instance['start']:
+		# Without a start and end time, assumed to be all day lone
+		begin_date     = arrow.get(instance['start']['date']).replace(tzinfo=tz.tzlocal())
+		begin_datetime = merge_date_time(begin_date, arrow.get('00:00', 'HH:mm'))
+		end_date       = arrow.get(instance['end']['date']).replace(tzinfo=tz.tzlocal())
+		end_datetime   = merge_date_time(end_date, arrow.get('23:59', 'HH:mm'))
+	else:
+		# This case shouldn't happen
+		print("Instance has no specified start and end time or date")
+		assert False
+
+	return {
+			"event_id": instance['id'],
+			"summary": instance['summary'],
+			"begin_datetime": begin_datetime,
+			"end_datetime": end_datetime
+			}
 
 
 def really_between_times(instance, begin_time, end_time):
@@ -168,16 +201,16 @@ def really_between_times(instance, begin_time, end_time):
 	# Normal case where end_time > begin_time. First lists all available time ranges on
 	# the entire date range upon which the instance exists. Then tests whether the 
 	# instance overlaps with any of the time ranges.
-	avails = list_availabilities_btwn_dates(instance['start']['dateTime'], instance['end']['dateTime'], begin_time, end_time)
-	instance_begin = arrow.get(instance['start']['dateTime'])
-	instance_end   = arrow.get(instance['end']['dateTime'])
+	avails = list_availabilities_btwn_dates(instance['begin_datetime'], instance['end_datetime'], begin_time, end_time)
+	instance_begin = arrow.get(instance['begin_datetime'])
+	instance_end   = arrow.get(instance['end_datetime'])
 	for avail in avails:
 		bt = arrow.get(avail['bt'])
 		et = arrow.get(avail['et'])
 		if (instance_begin < bt and instance_end < bt) or (instance_begin > et and instance_end > et):
 			continue
 		else:
-			print("{} is a busy time within {} and {} on {}")
+			print("{} is a busy time within {} and {} on {}".format(instance['summary'], begin, end, bt.format('YYYY-MM-DD')))
 			return True
 	
 	print("Event instance not in available query")
