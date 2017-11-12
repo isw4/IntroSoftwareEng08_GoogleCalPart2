@@ -34,9 +34,20 @@
 
   <h1>Busy times</h1>
   
-    <form action="{{ url_for('set_data') }}" method="post" id="daterangeform">
-      <div class="row">
-        <div class="col-md-4">
+  <h3>Select the time range for which you want to display your busy times, and then the date range to which that time range applies</h3>
+  <form action="{{ url_for('set_data') }}" method="post" id="daterangeform">
+    <div class="row">
+      <div class="col-md-3">
+        <label for="begin_time">Time Start</label>
+        <input name="begin_time" id="begin" type="time" value="{{ session.begin_time | fmttime }}">
+      </div>
+
+      <div class="col-md-3">
+        <label for="end_time">Time End</label>
+        <input name="end_time" id="end" type="time" value="{{ session.end_time | fmttime }}">
+      </div>
+
+      <div class="col-md-4">
         <label for="daterange">Date Range</label>
         <input type="text" name="daterange" size="13"
           {% if session.daterange is defined %}
@@ -62,50 +73,40 @@
           });
         </script>
       </div>
-      
-      <div class="col-md-3">
-        <label for="begin_time">Time Start</label>
-        <input name="begin_time" id="begin" type="time" value="{{ session.begin_time | fmttime }}">
-      </div>
-
-      <div class="col-md-3">
-        <label for="end_time">Time End</label>
-        <input name="end_time" id="end" type="time" value="{{ session.end_time | fmttime }}">
-      </div>
 
       <div class="col-md-2">
         <button type="submit" id="submit">Submit</button>
       </div>
-      </div>
+    </div>
 
-      {% if session.calendars is not defined %}
+    {% if session.calendars is not defined %}
 
-        <hr>
-        <p id="description">Some description about the app and data range picker</p>
+    <hr>
+    <p id="description">This displays your busy times from your Google Calendar. Press submit to log into your Google account, then select the Calendars from which you would like to display your busy times</p>
 
-      {% else %}
+    {% else %}
 
-        <hr>
-        <h3>Select your Calendars</h3>
-        <div class="row">
-          {% for cal in session.calendars if cal.selected %}
-            <div class="col-md-4">
-              <input name="checkbox" type="checkbox" value="{{ cal.id }}">
-              <label for="{{ cal.id }}">{{ cal.summary }}</label>
-            </div>
-            {% if loop.index is divisibleby 3 %}
-              </div> <div class="row">
-            {% endif %}
-          {% endfor %}
+    <hr>
+    <h3>Select your Calendars</h3>
+    <div class="row">
+      {% for cal in session.calendars if cal.selected %}
+        <div class="col-md-4">
+          <input name="checkbox" type="checkbox" value="{{ cal.id }}">
+          <label for="{{ cal.id }}">{{ cal.summary }}</label>
         </div>
+        {% if loop.index is divisibleby 3 %}
+          </div> <div class="row">
+        {% endif %}
+      {% endfor %}
+    </div>
 
-      {% endif %}
+    {% endif %}
 
-    </form>
+  </form>
   
   <div id="content">
 
-  {% if session.busytimes is defined %}
+  {% if session.busytimes|length > 0 %}
 
     <hr>
     <h3>These are your busy times</h3>
@@ -164,8 +165,5 @@
     })
   }) //end on document ready
 </script>
-
-
-
 </body>
 </html>

@@ -157,7 +157,7 @@ def reorg_instance(instance):
 	and removing unnecesary information
 
 	Args:
-		instance:	a google calendar dict
+		instance:	dict, a google calendar dict
 
 	Returns:
 		a dict with only relevant key value pairs
@@ -188,7 +188,18 @@ def reorg_instance(instance):
 def really_between_times(instance, begin_time, end_time):
 	"""
 	Checks whether the instance is a busy time that falls within the queried time range
-	of each date in the date range.
+	of each date in the date range. All instances that pass to this function must 
+	already have been restricted to instances within the specified date range. This
+	function only tests if they fall within the specified time range across the dates
+	that the instance span.
+
+	Args:
+		instance:	dict, our instance dict as returned by reorg_instance()
+		begin_time:	str, an isoformatted time that is the start of the time range
+		end_time:	str, an isoformatted time that is the end of the time range
+
+	Returns:
+		True if it is a busy time within the time range
 	"""
 
 	# Case where the user searches for busy times throughout the whole day(24h)
@@ -198,7 +209,7 @@ def really_between_times(instance, begin_time, end_time):
 		print("Begin and end time is the same. All instances will be busy times")
 		return True
 
-	# Normal case where end_time > begin_time. First lists all available time ranges on
+	# Case where end_time > begin_time. First lists all available time ranges on
 	# the entire date range upon which the instance exists. Then tests whether the 
 	# instance overlaps with any of the time ranges.
 	avails = list_availabilities_btwn_dates(instance['begin_datetime'], instance['end_datetime'], begin_time, end_time)
@@ -208,25 +219,30 @@ def really_between_times(instance, begin_time, end_time):
 		bt = arrow.get(avail['bt'])
 		et = arrow.get(avail['et'])
 		if (instance_begin < bt and instance_end < bt) or (instance_begin > et and instance_end > et):
+			print("{} is a NOT a busy time within {} and {} on {}".format(instance['summary'], begin, end, bt.format('YYYY-MM-DD')))
 			continue
 		else:
 			print("{} is a busy time within {} and {} on {}".format(instance['summary'], begin, end, bt.format('YYYY-MM-DD')))
 			return True
 	
-	print("Event instance not in available query")
 	return False
 
 
 def merge_date_time(isodate, isotime):
 	"""
 	Merging the date and timezone from isodate with the time from isotime
+
+	Args:
+		isodate:	str, an isoformatted time containing date and timezone information
+		isotime:	str, an isoformatted time containing time information
+
+	Returns:
+		a string, isoformatted time containing date, time, and timezone information
 	"""
 	date_arr = arrow.get(isodate)
 	time_arr = arrow.get(isotime)
-	#app.logger.debug("Merging date: {} and time: {}".format(date_arr.isoformat(), time_arr.isoformat()))
 	date_arr = date_arr.replace(hour=time_arr.hour,
 								minute=time_arr.minute)
-	#app.logger.debug("Merged datetime is {}".format(date_arr.isoformat()))
 	return date_arr.isoformat()
 
 
@@ -248,6 +264,15 @@ def list_availabilities_btwn_dates(iso_begin_date, iso_end_date, iso_begin_time,
 		{ 'bt': '2013-05-14T09:00:00+00:00' , 'et': '2013-05-14T18:00:00+00:00' },
 		{ 'bt': '2013-05-15T09:00:00+00:00' , 'et': '2013-05-15T18:00:00+00:00' }
 	]
+
+	Args:
+		iso_begin_date:	str, an isoformatted time containing the start date and tz from the user
+		iso_end_date:	str, an isoformatted time containing the end date and tz from the user
+		iso_begin_time:	str, an isoformatted time containing the start time from the user
+		iso_end_time:	str, an isoformatted time containing the end time from the user
+
+	Returns:
+		a list of dicts as described above
 	"""
 
 	avails = [{
