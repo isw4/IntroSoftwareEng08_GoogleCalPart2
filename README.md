@@ -1,8 +1,8 @@
-# proj7-Gcal
+# proj8-Gcal
 ### Author: Isaac Hong Wong (iwong@uoregon.edu)
 Grabs appointment data from a user's Google Calendar, and then displays
-the busy times within a specified time range, for each of the dates within
-a specified date range
+the busy and free times within a specified time range, for each of the 
+dates within a specified date range
 
 
 ## How to use
@@ -12,7 +12,8 @@ a specified date range
 3) Once authorized, select the calendars from which you want to extract
    busy times
 4) Submit, and the busy times from those calendars within the time and
-   date range will be displayed
+   date range will be displayed. The free times between those busy times
+   will also be displayed
 
 
 ## How to set up the server
@@ -44,7 +45,7 @@ make run
 Will disregard:
 	transparent events
 
-Will not disregard:
+Will include:
 	All day events
 	Events that span multiple days
 
