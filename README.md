@@ -50,6 +50,7 @@ Will not disregard:
 
 Eg) If the time specified is 9am to 5pm, from 11/11 to 11/14(MM:DD),
     then the following events with times will be regarded as:
+
     | Times        | Is Busy |
     | ---          | ---	 |
     | 7am to 8am   | False   |
@@ -60,6 +61,7 @@ Eg) If the time specified is 9am to 5pm, from 11/11 to 11/14(MM:DD),
     | 7pm to 8pm   | False   |
 
 Eg) For events spanning multiple days:
+
     | Times                     | Is Busy |
     | ---                       | ---	  |
     | 11/11 7pm to 11/12 8am    | False   |
