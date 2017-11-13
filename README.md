@@ -1,55 +1,66 @@
-# proj6-Gcal
-Snarf appointment data from a selection of a user's Google calendars 
-
-## What is here
-
-I've provided code for the authorization (oauth2) protocol for Google
-calendars.  There is also a picker for a date range. 
-
-## What you'll add
-
-You'll need to read the Google developer documentation to learn how to
-obtain information from the Google Calendar service.
-
-Your application should allow the user to choose calendars (a single
-user may have several Google calendars, one of which is the 'primary'
-calendar) and list 'blocking'  (non-transparent)
-appointments between a start date and an end date
-for some subset of them.
-
-## Hints
-
-You'll need a 'client secret' file of your own.  It should *not* be
-under GIT control.  This is kind of a
-developer key, which you need to obtain from Google.  See
-https://auth0.com/docs/connections/social/google and
-https://developers.google.com/identity/protocols/OAuth2 .
-The applicable scenario for us is 'Web server applications'  (since
-we're doing this in Flask).  
-
-Your client secret will have to be registered for the URLs used for 
-the oauth2 'callback' in the authorization protocol.  This URL includes
-the port on which your application is running, so you you will need to 
-use the same port each time you run your application. You can register 
-the same key for multiple URLs, so for example I have registered mine
-for localhost:5000/oauth2callback, localhost:8000/oauth2callback, 
-roethke.d.cs.uoregon.edu:5000/oauth2callback, and 
-roethke.d.cs.uoregon.edu:8000/oauth2callback. (Roethke is my raspberry Pi
-at school.)  When we test your code, our grader and I will use our own 
-admin_secrets.py and google credentials files, but we will use your 
-client_secrets.py file.  As in the last project, your client_secrets.py
-file should include a reference to your repository and to your name, 
-so that our friendly (but clumsy) robots can use it to install your code. 
-
-I have noticed that getting the list of calendars from Google is very very 
-slow when running on my laptop at home, and snappier when accessing through
-roethke.  I suspect that is because roethke.d.cs.uoregon.edu is is 
-a routable IP address, while "localhost" on my home network requires some
-behind-the-curtains magic from my home router.  I don't know that for sure. 
-
-Whether or not you already have a Google calendar, it's a good idea to
-create one or two 'test' calendars with a known set of appointments
-for testing.
+# proj7-Gcal
+### Author: Isaac Hong Wong (iwong@uoregon.edu)
+Grabs appointment data from a user's Google Calendar, and then displays
+the busy times within a specified time range, for each of the dates within
+a specified date range
 
 
+## How to use
 
+1) Submit a specified time range, and then a specified date range
+2) You will be redirected to a google authorization page to log in
+3) Once authorized, select the calendars from which you want to extract
+   busy times
+4) Submit, and the busy times from those calendars within the time and
+   date range will be displayed
+
+
+## How to set up the server
+
+You will need a Google API key, and set it up to allow the redirect URI
+```
+http://my_server_ip:my_port/oauth2callback
+```
+
+1) Copy the credentials-skel file to the meetings folder
+```
+cp credentials-skil.ini meetings/credentials.ini
+```
+
+2) Download the Google client secrets file from the Google API, and
+   reference the path from the credentials.ini file. Also set up any
+   configuration variables as you see fit in the credentials.ini file
+
+3) Run
+```
+make install
+make run
+```
+
+
+## What are the busy times returned?
+
+
+Will disregard:
+	transparent events
+
+Will not disregard:
+	All day events
+	Events that span multiple days
+
+Eg) If the time specified is 9am to 5pm, from 11/11 to 11/14(MM:DD),
+    then the following events with times will be regarded as:
+    | Times        | Is Busy |
+    | ---          | ---	 |
+    | 7am to 8am   | False   |
+    | 7am to 10am  | True    |
+    | 10am to 11am | True    |
+    | 7am to 6pm   | True    |
+    | 4pm to 7pm   | True    |
+    | 7pm to 8pm   | False   |
+
+Eg) For events spanning multiple days:
+    | Times                     | Is Busy |
+    | ---                       | ---	  |
+    | 11/11 7pm to 11/12 8am    | False   |
+    | 11/11 7pm to 11/12 10am   | True    |
