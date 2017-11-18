@@ -19,8 +19,9 @@ import httplib2   # used in oauth2 flow
 from apiclient import discovery
 
 # Functions to help get and process information from Google Calendars
-from from_gcal import list_calendars, list_instances_btwn_times_in_dates
-
+from from_gcal import list_calendars, list_instances_btwn_datetimes
+from timeslot import TimeSlot
+import calc, timeslot
 
 ###
 # Globals
@@ -74,16 +75,38 @@ def render_display():
 		flask.session['calendars'] = list_calendars(gcal_service)
 	
 	if not flask.session['selected_cal']:
+		# In the first submit, user has not yet selected calendars. Renders the page to let them select
 		app.logger.debug("No calendars already selected")
 		flask.session['busytimes'] = []
 		pass
 		# End of first submit
 	else:
-		# In the second submit, if user has selected calendars
+		# In the second submit, if user has selected calendars. begin/end_datetimes in cookies are already in the client tz
 		app.logger.debug("Getting busy event instances from these selected calendars: {}".format(flask.session['selected_cal']))
-		flask.session['busytimes'] = list_instances_btwn_times_in_dates(gcal_service, flask.session['selected_cal'], 
-																		flask.session['begin_date'], flask.session['end_date'],
-																		flask.session['begin_time'], flask.session['end_time'])
+		# Getting the periods of free time per date
+		raw_frees = calc.init_frees_by_date(flask.session['begin_datetime'], flask.session['end_datetime'])
+		# Getting event instances from the selected calendars, within a datetime range
+		raw_busys = list_instances_btwn_datetimes(gcal_service, flask.session['selected_cal'], 
+												  flask.session['begin_datetime'], 
+												  flask.session['end_datetime'])
+		
+		all_times = [ ]
+		for free in raw_frees:
+			# For the free period of each date, find the free and busy times within that
+			app.logger.debug('Trying {} to {}'.format(free.begin_datetime, free.end_datetime))
+			result = free.find_freebusy_from(raw_busys)
+			app.logger.debug('Free times: {}'.format(result[0]))
+			app.logger.debug('Busy times: {}'.format(result[1]))
+			freebusy = result[0] + result[1]
+			# Process data to display
+			sorted_fb = timeslot.sort_by_begin_time(freebusy, timeslot.ASCENDING)
+			ser_fb = timeslot.serialize_list(sorted_fb)
+			all_times.append({
+				'date': free.begin_datetime.split('T')[0],
+				'freebusy': ser_fb
+				})
+		
+		flask.session['busytimes'] = all_times
 		# End of second submit
 
 	return render_template('index.html')
@@ -106,23 +129,21 @@ def set_data():
 	Gets option information and sets cookies
 	"""
 	app.logger.debug("In set_data with request: {}".format(request.form))
-	
-	# Time
-	flask.session['begin_time'] = interpret_time(request.form.get('begin_time'))
-	flask.session['end_time'] = interpret_time(request.form.get('end_time'))
-	
-	assert arrow.get(flask.session['begin_time']) <= arrow.get(flask.session['end_time'])
-	app.logger.debug("Begin and end times make sense")
-
-	# Date
-	daterange = request.form.get('daterange')
-	flask.session['daterange'] = daterange
-	daterange_parts = daterange.split()
-	flask.session['begin_date'] = interpret_date(daterange_parts[0])
-	flask.session['end_date'] = interpret_date(daterange_parts[2])
-
-	# Calendar selections
+	timezone = request.form.get('timezone')
+	begin_time = request.form.get('begin_time')
+	end_time = request.form.get('end_time')
+	begin_date = request.form.get('daterange').split()[0]
+	end_date = request.form.get('daterange').split()[2]
 	selections = request.form.getlist("checkbox")
+
+	# Update cookies
+	flask.session['daterange'] = request.form.get('daterange')
+	flask.session['client_tz'] = timezone
+	# Interpret client dates and times. All calculations henceforth are in the client's timezone
+	flask.session['begin_datetime'] = interpret_datetimetz(begin_date, begin_time, timezone)
+	flask.session['end_datetime'] = interpret_datetimetz(end_date, end_time, timezone)
+	
+	# Calendar selections
 	if not selections:
 		app.logger.debug("No calendars selected")
 		flask.session['selected_cal'] = []
@@ -270,15 +291,39 @@ def init_session_values():
 	now = arrow.now('local')     # We really should be using tz from browser
 	tomorrow = now.replace(days=+1)
 	nextweek = now.replace(days=+7)
-	flask.session["begin_date"] = tomorrow.floor('day').isoformat()
-	flask.session["end_date"] = nextweek.ceil('day').isoformat()
 	flask.session["daterange"] = "{} - {}".format(
 		tomorrow.format("MM/DD/YYYY"),
 		nextweek.format("MM/DD/YYYY"))
 	# Default time span each day, 8 to 5
-	flask.session["begin_time"] = interpret_time("9am")
-	flask.session["end_time"] = interpret_time("5pm")
+	flask.session["begin_datetime"] = interpret_time("9am")
+	flask.session["end_datetime"] = interpret_time("5pm")
 	flask.session['selected_cal'] = []
+
+
+def interpret_datetimetz( date, time, timezone ):
+	"""
+	Read time in a human-compatible format and
+	interpret as ISO format with local timezone.
+	May throw exception if time can't be interpreted. In that
+	case it will also flash a message explaining accepted formats.
+
+	Args:
+		date: 		str, in format MM/DD/YYYY
+		time: 		str, in format HH:mm
+		timezone:	str, client timezone in format ZZ (+-HH:mm)
+
+	Returns:
+		an isoformatted string of datetime in the client timezone
+	"""
+	app.logger.debug("Decoding date: '{}', time: '{}', and timezone: '{}'".format(date, time, timezone))
+	dt_str = date + ' ' + time
+	try:
+		cl_arrow = arrow.get(dt_str, 'MM/DD/YYYY HH:mm').replace(tzinfo=timezone)
+		app.logger.debug("Client time interpreted as: '{}'".format(cl_arrow.isoformat()))
+	except:
+		app.logger.debug("Failed to interpret time")
+		raise
+	return cl_arrow.isoformat()
 
 
 def interpret_time( text ):
@@ -295,7 +340,7 @@ def interpret_time( text ):
 		as_arrow = as_arrow.replace(year=2016) #HACK see below
 		app.logger.debug("Succeeded interpreting time")
 	except:
-		app.logger.debug("Failed to interpret time")
+		
 		flask.flash("Time '{}' didn't match accepted formats 13:30 or 1:30pm"
 			  .format(text))
 		raise
@@ -308,21 +353,7 @@ def interpret_time( text ):
 	# get the timestamp into a reasonable range. This workaround should be
 	# removed when Arrow or Dateutil.tz is fixed.
 	# FIXME: Remove the workaround when arrow is fixed (but only after testing
-	# on raspberry Pi --- failure is likely due to 32-bit integers on that platform)
-
-
-def interpret_date( text ):
-	"""
-	Convert text of date to ISO format used internally,
-	with the local time zone.
-	"""
-	try:
-	  as_arrow = arrow.get(text, "MM/DD/YYYY").replace(
-		  tzinfo=tz.tzlocal())
-	except:
-		flask.flash("Date '{}' didn't fit expected format 12/31/2001")
-		raise
-	return as_arrow.isoformat()
+	# on raspberry Pi --- failure is likely due to 32-bit integers on that platform
 
 
 def next_day(isotext):
@@ -356,7 +387,28 @@ def format_arrow_time( time ):
 		return normal.format("HH:mm")
 	except:
 		return "(bad time)"
-	
+
+
+@app.template_filter( 'humanize_datetime' )
+def humanize_datetime( datetime ):
+	try:
+		normal = arrow.get( datetime )
+		return normal.format('ddd MM/DD/YYYY, hh:mma')
+	except:
+		return datetime
+
+
+@app.template_filter( 'is_free_or_busy' )
+def is_free_or_busy( summary ):
+	try:
+		if summary == "Free Time":
+			return "bg-success"
+		else:
+			return "bg-warning"
+	except:
+		return "(bad list)"
+
+
 #############
 
 

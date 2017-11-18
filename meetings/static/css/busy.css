@@ -15,3 +15,7 @@ body {
 form {
 	width: 100%;
 }
+
+.bg-info {
+	text-align: center;
+}
