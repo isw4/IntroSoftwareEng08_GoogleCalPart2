@@ -51,7 +51,7 @@ APPLICATION_NAME = 'MeetMe class project'
 @app.route("/index")
 def index():
 	app.logger.debug("Entering index page")
-	if 'begin_date' not in flask.session:
+	if 'begin_datetime' not in flask.session:
 		init_session_values()
 	return render_template('index.html')
 
